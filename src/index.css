@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* 自定义滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #1a1a2e;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #4a4a6a;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6a6a8a;
+  }
+}
+
+@layer components {
+  /* 投票按钮心跳动画 */
+  .vote-btn {
+    @apply transition-all duration-200 ease-out;
+  }
+  .vote-btn:active {
+    animation: heartBeat 0.3s ease-in-out;
+  }
+
+  /* 排行榜排名徽章 */
+  .rank-badge {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold;
+  }
+  .rank-1 { @apply bg-yellow-500 text-yellow-900; }
+  .rank-2 { @apply bg-gray-300 text-gray-700; }
+  .rank-3 { @apply bg-amber-600 text-amber-100; }
+  .rank-other { @apply bg-gray-700 text-gray-300; }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+  .glass-hover {
+    @apply hover:bg-white/10 hover:border-white/20 transition-all duration-300;
+  }
+}
