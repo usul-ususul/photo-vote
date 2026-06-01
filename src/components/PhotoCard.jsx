@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function PhotoCard({ photo, hasVoted, onVote, onPhotoClick, onCommentClick, isAdmin, adminToken, onAdminDeletePhoto }) {
+export default function PhotoCard({ photo, hasVoted, onVote, onPhotoClick, isAdmin, adminToken, onAdminDeletePhoto }) {
   const [voting, setVoting] = useState(false);
   const [localVoted, setLocalVoted] = useState(hasVoted);
   const [animate, setAnimate] = useState(false);
@@ -125,15 +125,6 @@ export default function PhotoCard({ photo, hasVoted, onVote, onPhotoClick, onCom
             {photo.created_at ? new Date(photo.created_at).toLocaleDateString('zh-CN') : ''}
           </p>
         </div>
-
-        {/* 评论按钮 */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onCommentClick?.(photo); }}
-          className="flex-shrink-0 px-3 py-1.5 rounded-full bg-blue-500/20 border border-blue-400/30 flex items-center gap-1 text-sm text-blue-300 hover:bg-blue-500/30 hover:border-blue-400/50 transition-all"
-          title="查看评论"
-        >
-          💬 <span className="text-xs">评论</span>
-        </button>
 
         {/* 投票按钮 */}
         <button

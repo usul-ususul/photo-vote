@@ -3,12 +3,11 @@ import { io } from 'socket.io-client';
 import PhotoGrid from './components/PhotoGrid';
 import Leaderboard from './components/Leaderboard';
 import UploadForm from './components/UploadForm';
-import PhotoDetail from './components/PhotoDetail';
-import HotComments from './components/HotComments';
 import AdminLogin from './components/AdminLogin';
 import AdminPanel from './components/AdminPanel';
 import Settings, { getBackgroundClass } from './components/Settings';
 import ImageLightbox from './components/ImageLightbox';
+import CommentCenter from './components/CommentCenter';
 
 const socket = io('/', {
   transports: ['websocket', 'polling'],
@@ -22,7 +21,7 @@ export default function App() {
   const [sortBy, setSortBy] = useState('newest');
   const [loading, setLoading] = useState(true);
   const [lightboxPhoto, setLightboxPhoto] = useState(null); // 大图查看
-  const [commentPhoto, setCommentPhoto] = useState(null); // 评论弹窗
+  const [showCommentCenter, setShowCommentCenter] = useState(false); // 评论中心
 
   // ===== 管理员状态 =====
   const [adminToken, setAdminToken] = useState(() => {
@@ -157,28 +156,6 @@ export default function App() {
     setLightboxPhoto(photo);
   };
 
-  // 点击评论按钮→打开评论
-  const handleCommentClick = async (photo) => {
-    try {
-      const res = await fetch(`/api/photos/${photo.id}`);
-      const data = await res.json();
-      if (data.success) setCommentPhoto(data.data);
-    } catch {
-      setCommentPhoto(photo);
-    }
-  };
-
-  // 从热评跳转到评论
-  const handleHotPhotoClick = async (photoId) => {
-    try {
-      const res = await fetch(`/api/photos/${photoId}`);
-      const data = await res.json();
-      if (data.success) setCommentPhoto(data.data);
-    } catch {
-      // 静默处理
-    }
-  };
-
   // ===== 管理员操作 =====
 
   // 验证管理员 token 有效性
@@ -292,6 +269,14 @@ export default function App() {
                 🔒
               </button>
             )}
+            {/* 评论中心按钮 */}
+            <button
+              onClick={() => setShowCommentCenter(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-500/20 border border-blue-400/30 rounded-lg text-blue-300 text-sm font-medium hover:bg-blue-500/30 transition-all"
+              title="评论中心"
+            >
+              💬 评论
+            </button>
             {/* 设置按钮 */}
             <button
               onClick={() => setShowSettings(true)}
@@ -358,7 +343,6 @@ export default function App() {
                 votedIds={votedIds}
                 onVote={handleVote}
                 onPhotoClick={handlePhotoClick}
-                onCommentClick={handleCommentClick}
                 isAdmin={isAdmin}
                 adminToken={adminToken}
                 onAdminDeletePhoto={handleAdminDeletePhoto}
@@ -369,7 +353,6 @@ export default function App() {
           {/* 排行榜侧边栏 */}
           <aside className="lg:w-80 flex-shrink-0 space-y-6">
             <Leaderboard leaderboard={leaderboard} />
-            <HotComments socket={socket} onPhotoClick={handleHotPhotoClick} />
           </aside>
         </div>
       </main>
@@ -390,15 +373,14 @@ export default function App() {
         />
       )}
 
-      {/* 评论弹窗 */}
-      {commentPhoto && (
-        <PhotoDetail
-          photo={commentPhoto}
+      {/* 评论中心 */}
+      {showCommentCenter && (
+        <CommentCenter
           socket={socket}
-          onClose={() => setCommentPhoto(null)}
           isAdmin={isAdmin}
           adminToken={adminToken}
           onAdminDeleteComment={handleAdminDeleteComment}
+          onClose={() => setShowCommentCenter(false)}
         />
       )}
 
