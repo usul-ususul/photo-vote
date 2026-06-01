@@ -1,4 +1,25 @@
 import { createClient } from '@libsql/client';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// 本地开发时自动加载 .env 文件（静默处理，不存在则跳过）
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = join(__dirname, '..', '.env');
+if (existsSync(envPath)) {
+  const content = readFileSync(envPath, 'utf-8');
+  content.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) return;
+    const key = trimmed.substring(0, eqIdx).trim();
+    const val = trimmed.substring(eqIdx + 1).trim();
+    if (key && val && !process.env[key]) {
+      process.env[key] = val;
+    }
+  });
+}
 
 // Turso/SQLite 数据库连接
 // 支持本地开发 (file:server/data.db) 和 Turso 云数据库 (libsql://...)
