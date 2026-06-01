@@ -1,17 +1,10 @@
-import { writeFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { initDb, addPhoto, getAllPhotos } from './db.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = join(__dirname, 'uploads');
-
 /**
- * 生成一个简单的 SVG 占位图片
- * 使用渐变色 + emoji 作为占位符
+ * 生成一个简单的 SVG 占位图片并转为 Base64 data URL
  */
-function generatePlaceholderSVG(emoji, bgColor1, bgColor2) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+function generatePlaceholderDataURL(emoji, bgColor1, bgColor2) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:${bgColor1}"/>
@@ -22,6 +15,8 @@ function generatePlaceholderSVG(emoji, bgColor1, bgColor2) {
   <text x="400" y="280" text-anchor="middle" font-size="120">${emoji}</text>
   <text x="400" y="380" text-anchor="middle" font-size="28" fill="rgba(255,255,255,0.8)" font-family="sans-serif">PhotoVote</text>
 </svg>`;
+  const base64 = Buffer.from(svg).toString('base64');
+  return `data:image/svg+xml;base64,${base64}`;
 }
 
 /**
@@ -40,7 +35,7 @@ async function seed() {
   await initDb();
 
   // 检查是否已有数据
-  const existing = getAllPhotos();
+  const existing = await getAllPhotos();
   if (existing.length > 0) {
     console.log(`📸 数据库已有 ${existing.length} 张照片，跳过种子数据`);
     return;
@@ -49,17 +44,11 @@ async function seed() {
   console.log('🌱 开始生成种子数据...');
 
   for (const item of seedPhotos) {
-    const filename = `placeholder-${item.title.replace(/[^a-zA-Z一-龥]/g, '-')}.svg`;
-    const filepath = join(UPLOADS_DIR, filename);
+    const filename = `placeholder-${item.title.replace(/[^a-zA-Z一-鿿]/g, '-')}.svg`;
+    const imageData = generatePlaceholderDataURL(item.emoji, item.bg1, item.bg2);
 
-    // 生成 SVG 占位图片
-    if (!existsSync(filepath)) {
-      const svg = generatePlaceholderSVG(item.emoji, item.bg1, item.bg2);
-      writeFileSync(filepath, svg, 'utf-8');
-    }
-
-    // 添加到数据库
-    const photo = addPhoto(item.title, filename);
+    // 添加到数据库（Base64 格式）
+    const photo = await addPhoto(item.title, filename, imageData);
     console.log(`  ✅ 已添加: ${item.title}`);
   }
 

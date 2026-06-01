@@ -1,4 +1,13 @@
 node_modules/
 dist/
-server/data.db
 .env
+server/data.db
+server/data.db-wal
+server/data.db-shm
+*.db
+*.db-wal
+*.db-shm
+auth
+auth-wal
+db
+db-wal

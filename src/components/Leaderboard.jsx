@@ -55,7 +55,7 @@ export default function Leaderboard({ leaderboard }) {
                 {/* 缩略图 */}
                 <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-800">
                   <img
-                    src={`/uploads/${photo.filename}`}
+                    src={`/api/photo/${photo.id}/file`}
                     alt={photo.title}
                     className="w-full h-full object-cover"
                     loading="lazy"

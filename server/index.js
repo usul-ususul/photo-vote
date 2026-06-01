@@ -2,45 +2,14 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import multer from 'multer';
-import { join, dirname, extname } from 'path';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, mkdirSync } from 'fs';
-import { v4 as uuidv4 } from 'uuid';
+import { existsSync } from 'fs';
 import { initDb, getAllPhotos, getPhotoById, addPhoto, votePhoto, getLeaderboard, getUserVotes } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = join(__dirname, 'uploads');
 const DIST_DIR = join(__dirname, '..', 'dist');
 const isProduction = existsSync(DIST_DIR);
-
-// 确保上传目录存在
-if (!existsSync(UPLOADS_DIR)) {
-  mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-
-// Multer 配置
-const storage = multer.diskStorage({
-  destination: UPLOADS_DIR,
-  filename: (req, file, cb) => {
-    const ext = extname(file.originalname);
-    const name = `${uuidv4()}${ext}`;
-    cb(null, name);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
-    const allowed = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i;
-    if (allowed.test(extname(file.originalname))) {
-      cb(null, true);
-    } else {
-      cb(new Error('只支持图片文件（jpg, jpeg, png, gif, webp, bmp, svg）'));
-    }
-  },
-});
 
 // Express 应用
 const app = express();
@@ -56,8 +25,7 @@ const io = new Server(httpServer, {
 
 // 中间件
 app.use(cors());
-app.use(express.json());
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use(express.json({ limit: '50mb' })); // 增大 JSON body 限制以支持 Base64 图片
 
 // 生产环境：提供前端构建文件
 if (isProduction) {
@@ -76,10 +44,10 @@ function getClientIP(req) {
 // ============ API 路由 ============
 
 // 获取所有照片
-app.get('/api/photos', (req, res) => {
+app.get('/api/photos', async (req, res) => {
   try {
     const { sort } = req.query;
-    const photos = getAllPhotos(sort);
+    const photos = await getAllPhotos(sort);
     res.json({ success: true, data: photos });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -87,9 +55,9 @@ app.get('/api/photos', (req, res) => {
 });
 
 // 获取单张照片
-app.get('/api/photos/:id', (req, res) => {
+app.get('/api/photos/:id', async (req, res) => {
   try {
-    const photo = getPhotoById(Number(req.params.id));
+    const photo = await getPhotoById(Number(req.params.id));
     if (!photo) {
       return res.status(404).json({ success: false, message: '照片不存在' });
     }
@@ -99,14 +67,32 @@ app.get('/api/photos/:id', (req, res) => {
   }
 });
 
-// 上传照片
-app.post('/api/upload', upload.single('photo'), (req, res) => {
+// 上传照片（JSON + Base64）
+app.post('/api/upload', async (req, res) => {
   try {
-    if (!req.file) {
+    const { title, imageData } = req.body;
+
+    if (!imageData) {
       return res.status(400).json({ success: false, message: '请选择要上传的照片' });
     }
-    const title = req.body.title || '未命名照片';
-    const photo = addPhoto(title, req.file.filename);
+
+    // 验证 Base64 数据格式
+    if (!imageData.startsWith('data:image/')) {
+      return res.status(400).json({ success: false, message: '图片数据格式不正确' });
+    }
+
+    // 检查图片大小（Base64 约 50MB 限制，相当于原始图片约 37MB）
+    if (imageData.length > 50 * 1024 * 1024) {
+      return res.status(400).json({ success: false, message: '图片大小不能超过 10MB' });
+    }
+
+    const photoTitle = (title || '未命名照片').trim();
+    // 从 Base64 data URL 中提取原始文件名信息
+    const mimeMatch = imageData.match(/^data:(image\/\w+);/);
+    const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpg';
+    const filename = `${Date.now()}.${ext}`;
+
+    const photo = await addPhoto(photoTitle, filename, imageData);
 
     // 通过 Socket.io 广播新照片
     io.emit('newPhoto', photo);
@@ -117,12 +103,44 @@ app.post('/api/upload', upload.single('photo'), (req, res) => {
   }
 });
 
+// 获取照片图片文件（从 Base64 数据返回真实图片）
+app.get('/api/photo/:id/file', async (req, res) => {
+  try {
+    const photo = await getPhotoById(Number(req.params.id));
+    if (!photo || !photo.image_data) {
+      return res.status(404).send('图片不存在');
+    }
+
+    const imageData = photo.image_data;
+
+    // 解析 Base64 data URL: data:image/jpeg;base64,xxxxx
+    const matches = imageData.match(/^data:(image\/[\w+]+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(500).send('图片数据格式错误');
+    }
+
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // 设置缓存头（7 天）
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Length': buffer.length,
+      'Cache-Control': 'public, max-age=604800, immutable',
+    });
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).send('读取图片失败');
+  }
+});
+
 // 投票
-app.post('/api/photos/:id/vote', (req, res) => {
+app.post('/api/photos/:id/vote', async (req, res) => {
   try {
     const photoId = Number(req.params.id);
     const ip = getClientIP(req);
-    const result = votePhoto(photoId, ip);
+    const result = await votePhoto(photoId, ip);
 
     if (!result.success) {
       return res.status(400).json(result);
@@ -136,7 +154,7 @@ app.post('/api/photos/:id/vote', (req, res) => {
     });
 
     // 同时广播排行榜更新
-    const leaderboard = getLeaderboard(10);
+    const leaderboard = await getLeaderboard(10);
     io.emit('leaderboardUpdate', leaderboard);
 
     res.json(result);
@@ -146,10 +164,10 @@ app.post('/api/photos/:id/vote', (req, res) => {
 });
 
 // 获取排行榜
-app.get('/api/leaderboard', (req, res) => {
+app.get('/api/leaderboard', async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 10;
-    const leaderboard = getLeaderboard(limit);
+    const leaderboard = await getLeaderboard(limit);
     res.json({ success: true, data: leaderboard });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -157,10 +175,10 @@ app.get('/api/leaderboard', (req, res) => {
 });
 
 // 获取当前用户的投票记录
-app.get('/api/my-votes', (req, res) => {
+app.get('/api/my-votes', async (req, res) => {
   try {
     const ip = getClientIP(req);
-    const votedIds = getUserVotes(ip);
+    const votedIds = await getUserVotes(ip);
     res.json({ success: true, data: votedIds });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -189,7 +207,7 @@ async function start() {
   const PORT = process.env.PORT || 4000;
   httpServer.listen(PORT, () => {
     console.log(`🚀 服务器已启动: http://localhost:${PORT}`);
-    console.log(`📸 照片上传目录: ${UPLOADS_DIR}`);
+    console.log(`💾 数据持久化: ${process.env.TURSO_URL ? 'Turso 云数据库' : '本地 SQLite'}`);
   });
 }
 

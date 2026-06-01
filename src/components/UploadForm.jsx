@@ -4,6 +4,7 @@ export default function UploadForm({ onClose, onSuccess }) {
   const [title, setTitle] = useState('');
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [imageData, setImageData] = useState(null); // Base64 图片数据
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -33,9 +34,13 @@ export default function UploadForm({ onClose, onSuccess }) {
     setError('');
     setFile(selected);
 
-    // 生成预览
+    // 读取文件为 Base64 data URL
     const reader = new FileReader();
-    reader.onload = (e) => setPreview(e.target.result);
+    reader.onload = (e) => {
+      const base64 = e.target.result;
+      setPreview(base64);
+      setImageData(base64);
+    };
     reader.readAsDataURL(selected);
 
     // 自动填充标题
@@ -63,7 +68,7 @@ export default function UploadForm({ onClose, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file) {
+    if (!imageData) {
       setError('请选择一张照片');
       return;
     }
@@ -72,13 +77,13 @@ export default function UploadForm({ onClose, onSuccess }) {
     setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('photo', file);
-      formData.append('title', title.trim() || '未命名照片');
-
       const res = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim() || '未命名照片',
+          imageData: imageData,
+        }),
       });
 
       const data = await res.json();
@@ -187,7 +192,7 @@ export default function UploadForm({ onClose, onSuccess }) {
           {/* 提交按钮 */}
           <button
             type="submit"
-            disabled={uploading || !file}
+            disabled={uploading || !imageData}
             className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl text-white font-semibold hover:from-pink-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2"
           >
             {uploading ? (

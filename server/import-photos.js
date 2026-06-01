@@ -1,4 +1,4 @@
-import { readdirSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join, dirname, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { initDb, addPhoto, getAllPhotos } from './db.js';
@@ -11,7 +11,6 @@ function cleanTitle(filename) {
   let name = filename.replace(/\.[^.]+$/, '');
 
   // 格式1: 微信图片_YYYYMMDDHHmmss_xxx_xxx 或 Weixin Image_YYYYMMDDHHmmss_xxx_x
-  // 提取日期时间戳 YYYYMMDDHHmmss
   const tsMatch = name.match(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
   if (tsMatch) {
     const [, y, m, d, h, min] = tsMatch;
@@ -27,9 +26,7 @@ function cleanTitle(filename) {
 
   // 格式3: 清理微信图片和 Weixin Image 前缀
   name = name.replace(/^(微信图片_|Weixin\s*Image_?)/i, '');
-  // 去掉末尾的数字序列如 "_164_833" 或 "_684_6"
   name = name.replace(/[_\s]+\d+[_\s]+\d+$/, '');
-  // 把下划线替换为空格
   name = name.replace(/_/g, ' ');
 
   if (name.length > 50) name = name.substring(0, 50);
@@ -37,28 +34,59 @@ function cleanTitle(filename) {
   return name.trim() || '未命名照片';
 }
 
+/**
+ * 将文件转为 Base64 data URL
+ */
+function fileToDataURL(filepath) {
+  const ext = extname(filepath).toLowerCase();
+  const mimeMap = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml',
+  };
+  const mime = mimeMap[ext] || 'image/jpeg';
+  const buffer = readFileSync(filepath);
+  const base64 = buffer.toString('base64');
+  return `data:${mime};base64,${base64}`;
+}
+
 async function importPhotos() {
   await initDb();
 
   // 获取数据库中已有的文件名
-  const existing = getAllPhotos();
+  const existing = await getAllPhotos();
   const existingFilenames = new Set(existing.map(p => p.filename));
 
   // 读取 uploads 目录中的文件
-  const files = readdirSync(UPLOADS_DIR);
-  const imageFiles = files.filter(f => {
-    const ext = extname(f).toLowerCase();
-    return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'].includes(ext);
-  });
+  let imageFiles = [];
+  try {
+    const files = readdirSync(UPLOADS_DIR);
+    imageFiles = files.filter(f => {
+      const ext = extname(f).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'].includes(ext);
+    });
+  } catch {
+    console.log('📁 uploads 目录不存在，跳过导入');
+    return;
+  }
 
   let imported = 0;
   for (const file of imageFiles) {
     if (existingFilenames.has(file)) {
-      continue; // 已在数据库中
+      console.log(`  ⏭️ 跳过（已存在）: ${file}`);
+      continue;
     }
+
     const title = cleanTitle(file);
-    const photo = addPhoto(title, file);
-    console.log(`  ✅ ${title} (${file})`);
+    const filepath = join(UPLOADS_DIR, file);
+    const imageData = fileToDataURL(filepath);
+
+    console.log(`  📤 导入: ${title} (${file}) — ${(Buffer.byteLength(imageData) / 1024).toFixed(1)}KB`);
+    await addPhoto(title, file, imageData);
     imported++;
   }
 
@@ -68,8 +96,7 @@ async function importPhotos() {
     console.log(`\n🎉 成功导入 ${imported} 张新照片！`);
   }
 
-  // 显示总数
-  const all = getAllPhotos();
+  const all = await getAllPhotos();
   console.log(`📊 数据库共有 ${all.length} 张照片`);
 }
 

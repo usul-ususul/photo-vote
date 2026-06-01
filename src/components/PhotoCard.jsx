@@ -6,7 +6,7 @@ export default function PhotoCard({ photo, hasVoted, onVote }) {
   const [animate, setAnimate] = useState(false);
   const [showToast, setShowToast] = useState(null);
 
-  const imageUrl = `/uploads/${photo.filename}`;
+  const imageUrl = `/api/photo/${photo.id}/file`;
 
   const handleVote = async () => {
     if (localVoted || voting) return;
