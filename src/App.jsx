@@ -5,6 +5,10 @@ import Leaderboard from './components/Leaderboard';
 import UploadForm from './components/UploadForm';
 import PhotoDetail from './components/PhotoDetail';
 import HotComments from './components/HotComments';
+import AdminLogin from './components/AdminLogin';
+import AdminPanel from './components/AdminPanel';
+import Settings, { getBackgroundClass } from './components/Settings';
+import ImageLightbox from './components/ImageLightbox';
 
 const socket = io('/', {
   transports: ['websocket', 'polling'],
@@ -17,7 +21,23 @@ export default function App() {
   const [showUpload, setShowUpload] = useState(false);
   const [sortBy, setSortBy] = useState('newest');
   const [loading, setLoading] = useState(true);
-  const [selectedPhoto, setSelectedPhoto] = useState(null); // 照片详情弹窗
+  const [lightboxPhoto, setLightboxPhoto] = useState(null); // 大图查看
+  const [commentPhoto, setCommentPhoto] = useState(null); // 评论弹窗
+
+  // ===== 管理员状态 =====
+  const [adminToken, setAdminToken] = useState(() => {
+    // 从 sessionStorage 恢复管理员会话
+    return sessionStorage.getItem('adminToken') || null;
+  });
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const isAdmin = !!adminToken;
+
+  // ===== 页面背景设置 =====
+  const [bgSetting, setBgSetting] = useState(() => {
+    return localStorage.getItem('bgSetting') || 'default';
+  });
+  const [showSettings, setShowSettings] = useState(false);
 
   // 加载照片数据
   const fetchPhotos = async (sort = sortBy) => {
@@ -59,6 +79,16 @@ export default function App() {
     fetchPhotos();
     fetchLeaderboard();
     fetchMyVotes();
+
+    // 验证已存储的管理员 token
+    if (adminToken) {
+      checkAdminToken(adminToken).then(valid => {
+        if (!valid) {
+          setAdminToken(null);
+          sessionStorage.removeItem('adminToken');
+        }
+      });
+    }
   }, []);
 
   // Socket.io 实时更新
@@ -77,10 +107,20 @@ export default function App() {
       setPhotos(prev => [photo, ...prev]);
     });
 
+    socket.on('photoDeleted', ({ photoId }) => {
+      setPhotos(prev => prev.filter(p => p.id !== photoId));
+    });
+
+    socket.on('commentDeleted', ({ commentId }) => {
+      // 如果详情弹窗打开，评论删除由子组件处理
+    });
+
     return () => {
       socket.off('voteUpdate');
       socket.off('leaderboardUpdate');
       socket.off('newPhoto');
+      socket.off('photoDeleted');
+      socket.off('commentDeleted');
     };
   }, []);
 
@@ -112,31 +152,95 @@ export default function App() {
     fetchLeaderboard();
   };
 
-  // 点击照片打开详情
-  const handlePhotoClick = async (photo) => {
+  // 点击照片→查看大图
+  const handlePhotoClick = (photo) => {
+    setLightboxPhoto(photo);
+  };
+
+  // 点击评论按钮→打开评论
+  const handleCommentClick = async (photo) => {
     try {
       const res = await fetch(`/api/photos/${photo.id}`);
       const data = await res.json();
-      if (data.success) setSelectedPhoto(data.data);
+      if (data.success) setCommentPhoto(data.data);
     } catch {
-      // 如果 API 调用失败，直接用已有数据
-      setSelectedPhoto(photo);
+      setCommentPhoto(photo);
     }
   };
 
-  // 根据 ID 打开照片详情（从热评跳转）
+  // 从热评跳转到评论
   const handleHotPhotoClick = async (photoId) => {
     try {
       const res = await fetch(`/api/photos/${photoId}`);
       const data = await res.json();
-      if (data.success) setSelectedPhoto(data.data);
+      if (data.success) setCommentPhoto(data.data);
     } catch {
       // 静默处理
     }
   };
 
+  // ===== 管理员操作 =====
+
+  // 验证管理员 token 有效性
+  const checkAdminToken = async (token) => {
+    try {
+      const res = await fetch('/api/admin/check', {
+        headers: { 'x-admin-token': token },
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  // 管理员登录
+  const handleAdminLogin = async (token) => {
+    setAdminToken(token);
+    sessionStorage.setItem('adminToken', token);
+    setShowAdminLogin(false);
+  };
+
+  // 管理员登出
+  const handleAdminLogout = () => {
+    setAdminToken(null);
+    sessionStorage.removeItem('adminToken');
+    setShowAdminPanel(false);
+  };
+
+  // 管理员删除照片
+  const handleAdminDeletePhoto = async (photoId) => {
+    if (!adminToken) return { success: false, message: '无权限' };
+    try {
+      const res = await fetch(`/api/admin/photos/${photoId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-token': adminToken },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPhotos(prev => prev.filter(p => p.id !== photoId));
+      }
+      return data;
+    } catch (err) {
+      return { success: false, message: '网络错误' };
+    }
+  };
+
+  // 管理员删除评论
+  const handleAdminDeleteComment = async (commentId) => {
+    if (!adminToken) return { success: false, message: '无权限' };
+    try {
+      const res = await fetch(`/api/admin/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-token': adminToken },
+      });
+      return await res.json();
+    } catch {
+      return { success: false, message: '网络错误' };
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950">
+    <div className={`min-h-screen ${getBackgroundClass(bgSetting)}`}>
       {/* 顶部导航栏 */}
       <header className="sticky top-0 z-50 glass border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -170,6 +274,44 @@ export default function App() {
                 最热
               </button>
             </div>
+            {/* 管理员按钮 */}
+            {isAdmin ? (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-500 rounded-lg text-white text-sm font-medium hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg shadow-orange-500/25"
+                title="管理面板"
+              >
+                🛡️ 管理
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowAdminLogin(true)}
+                className="flex items-center gap-1.5 px-3 py-2 glass border border-white/10 rounded-lg text-gray-400 text-sm hover:text-white hover:bg-white/10 transition-all"
+                title="管理员登录"
+              >
+                🔒
+              </button>
+            )}
+            {/* 设置按钮 */}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-1.5 px-3 py-2 glass border border-white/10 rounded-lg text-gray-400 text-sm hover:text-white hover:bg-white/10 transition-all"
+              title="页面设置"
+            >
+              ⚙️
+            </button>
+            {/* 刷新按钮 */}
+            <button
+              onClick={() => {
+                fetchPhotos();
+                fetchLeaderboard();
+                fetchMyVotes();
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 glass border border-white/10 rounded-lg text-gray-400 text-sm hover:text-white hover:bg-white/10 transition-all"
+              title="刷新数据"
+            >
+              🔄
+            </button>
             {/* 上传按钮 */}
             <button
               onClick={() => setShowUpload(true)}
@@ -211,7 +353,16 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <PhotoGrid photos={photos} votedIds={votedIds} onVote={handleVote} onPhotoClick={handlePhotoClick} />
+              <PhotoGrid
+                photos={photos}
+                votedIds={votedIds}
+                onVote={handleVote}
+                onPhotoClick={handlePhotoClick}
+                onCommentClick={handleCommentClick}
+                isAdmin={isAdmin}
+                adminToken={adminToken}
+                onAdminDeletePhoto={handleAdminDeletePhoto}
+              />
             )}
           </div>
 
@@ -231,12 +382,52 @@ export default function App() {
         />
       )}
 
-      {/* 照片详情弹窗 */}
-      {selectedPhoto && (
+      {/* 大图查看 */}
+      {lightboxPhoto && (
+        <ImageLightbox
+          photo={lightboxPhoto}
+          onClose={() => setLightboxPhoto(null)}
+        />
+      )}
+
+      {/* 评论弹窗 */}
+      {commentPhoto && (
         <PhotoDetail
-          photo={selectedPhoto}
+          photo={commentPhoto}
           socket={socket}
-          onClose={() => setSelectedPhoto(null)}
+          onClose={() => setCommentPhoto(null)}
+          isAdmin={isAdmin}
+          adminToken={adminToken}
+          onAdminDeleteComment={handleAdminDeleteComment}
+        />
+      )}
+
+      {/* 管理员登录弹窗 */}
+      {showAdminLogin && (
+        <AdminLogin
+          onLogin={handleAdminLogin}
+          onClose={() => setShowAdminLogin(false)}
+        />
+      )}
+
+      {/* 管理面板弹窗 */}
+      {showAdminPanel && (
+        <AdminPanel
+          token={adminToken}
+          onLogout={handleAdminLogout}
+          onClose={() => setShowAdminPanel(false)}
+        />
+      )}
+
+      {/* 设置弹窗 */}
+      {showSettings && (
+        <Settings
+          currentBg={bgSetting}
+          onChange={(bgId) => {
+            setBgSetting(bgId);
+            localStorage.setItem('bgSetting', bgId);
+          }}
+          onClose={() => setShowSettings(false)}
         />
       )}
 

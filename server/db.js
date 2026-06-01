@@ -43,9 +43,17 @@ export async function initDb() {
       filename TEXT NOT NULL DEFAULT '',
       image_data TEXT NOT NULL DEFAULT '',
       vote_count INTEGER DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'approved',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // 兼容旧表：如果 status 列不存在则添加
+  try {
+    await client.execute("ALTER TABLE photos ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'");
+  } catch {
+    // 列已存在则忽略
+  }
 
   // 创建投票记录表（IP 去重）
   await client.execute(`
@@ -78,17 +86,45 @@ export async function initDb() {
 // ============ 业务 API ============
 
 /**
- * 获取所有照片
+ * 获取所有照片（默认只返回已审核通过的）
+ * @param {string} orderBy - 排序方式
+ * @param {boolean} includePending - 是否包含待审核（管理员用）
  */
-export async function getAllPhotos(orderBy = 'created_at DESC') {
+export async function getAllPhotos(orderBy = 'created_at DESC', includePending = false) {
   const validOrders = {
     'votes': 'vote_count DESC',
     'newest': 'created_at DESC',
     'oldest': 'created_at ASC',
   };
   const order = validOrders[orderBy] || 'created_at DESC';
-  const result = await client.execute(`SELECT * FROM photos ORDER BY ${order}`);
+  const whereClause = includePending ? '' : "WHERE status = 'approved'";
+  const result = await client.execute(`SELECT * FROM photos ${whereClause} ORDER BY ${order}`);
   return result.rows;
+}
+
+/**
+ * 获取待审核的照片列表
+ */
+export async function getPendingPhotos() {
+  const result = await client.execute(
+    "SELECT * FROM photos WHERE status = 'pending' ORDER BY created_at ASC"
+  );
+  return result.rows;
+}
+
+/**
+ * 审核通过照片
+ */
+export async function approvePhoto(photoId) {
+  await client.execute("UPDATE photos SET status = 'approved' WHERE id = ?", [photoId]);
+  return await getPhotoById(photoId);
+}
+
+/**
+ * 拒绝照片（直接删除）
+ */
+export async function rejectPhoto(photoId) {
+  await deletePhoto(photoId);
 }
 
 /**
@@ -110,7 +146,7 @@ export async function getPhotoById(id) {
  */
 export async function addPhoto(title, filename, imageData) {
   const result = await client.execute(
-    'INSERT INTO photos (title, filename, image_data) VALUES (?, ?, ?)',
+    "INSERT INTO photos (title, filename, image_data, status) VALUES (?, ?, ?, 'pending')",
     [title, filename, imageData]
   );
   // 获取刚插入的记录
@@ -216,4 +252,97 @@ export async function getHotComments(limit = 5) {
     [limit]
   );
   return result.rows;
+}
+
+// ============ 管理员 API ============
+
+/**
+ * 初始化配置表
+ */
+async function initConfig() {
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+  // 设置默认管理员密码（首次运行时）
+  const existing = await client.execute("SELECT value FROM config WHERE key = 'admin_password'");
+  if (existing.rows.length === 0) {
+    await client.execute("INSERT INTO config (key, value) VALUES ('admin_password', 'admin123')");
+  }
+}
+
+/**
+ * 验证管理员密码
+ */
+export async function verifyAdminPassword(password) {
+  await initConfig();
+  const result = await client.execute("SELECT value FROM config WHERE key = 'admin_password'");
+  if (result.rows.length === 0) return false;
+  return result.rows[0].value === password;
+}
+
+/**
+ * 修改管理员密码
+ */
+export async function updateAdminPassword(newPassword) {
+  await initConfig();
+  await client.execute("INSERT OR REPLACE INTO config (key, value) VALUES ('admin_password', ?)", [newPassword]);
+}
+
+/**
+ * 删除照片（级联删除关联的投票和评论）
+ */
+export async function deletePhoto(photoId) {
+  // 外键约束会自动级联删除，但为了兼容手动处理
+  await client.execute('DELETE FROM votes WHERE photo_id = ?', [photoId]);
+  await client.execute('DELETE FROM comments WHERE photo_id = ?', [photoId]);
+  await client.execute('DELETE FROM photos WHERE id = ?', [photoId]);
+}
+
+/**
+ * 删除评论
+ */
+export async function deleteComment(commentId) {
+  await client.execute('DELETE FROM comments WHERE id = ?', [commentId]);
+}
+
+/**
+ * 获取管理面板统计数据
+ */
+export async function getStats() {
+  const photoCount = await client.execute("SELECT COUNT(*) as count FROM photos WHERE status = 'approved'");
+  const pendingCount = await client.execute("SELECT COUNT(*) as count FROM photos WHERE status = 'pending'");
+  const commentCount = await client.execute('SELECT COUNT(*) as count FROM comments');
+  const voteCount = await client.execute('SELECT COUNT(*) as count FROM votes');
+  const totalVotes = await client.execute('SELECT COALESCE(SUM(vote_count), 0) as total FROM photos');
+
+  return {
+    totalPhotos: photoCount.rows[0]?.count || 0,
+    pendingPhotos: pendingCount.rows[0]?.count || 0,
+    totalComments: commentCount.rows[0]?.count || 0,
+    totalVoteRecords: voteCount.rows[0]?.count || 0,
+    totalVoteSum: totalVotes.rows[0]?.total || 0,
+  };
+}
+
+/**
+ * 获取维护模式状态
+ */
+export async function getMaintenanceMode() {
+  await initConfig();
+  const result = await client.execute("SELECT value FROM config WHERE key = 'maintenance'");
+  return result.rows.length > 0 && result.rows[0].value === 'true';
+}
+
+/**
+ * 设置维护模式
+ */
+export async function setMaintenanceMode(enabled) {
+  await initConfig();
+  await client.execute(
+    "INSERT OR REPLACE INTO config (key, value) VALUES ('maintenance', ?)",
+    [enabled ? 'true' : 'false']
+  );
 }

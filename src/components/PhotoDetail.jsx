@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 
-export default function PhotoDetail({ photo, socket, onClose }) {
+export default function PhotoDetail({ photo, socket, onClose, isAdmin, adminToken, onAdminDeleteComment }) {
   const [comments, setComments] = useState([]);
   const [author, setAuthor] = useState('');
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deletingIds, setDeletingIds] = useState(new Set());
   const listRef = useRef(null);
 
   const imageUrl = `/api/photo/${photo.id}/file`;
@@ -30,14 +31,43 @@ export default function PhotoDetail({ photo, socket, onClose }) {
 
   // 实时接收新评论
   useEffect(() => {
-    const handler = ({ photoId, comment }) => {
+    const newHandler = ({ photoId, comment }) => {
       if (photoId === photo.id) {
         setComments(prev => [comment, ...prev]);
       }
     };
-    socket.on('newComment', handler);
-    return () => socket.off('newComment', handler);
+    const deleteHandler = ({ commentId }) => {
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    };
+    socket.on('newComment', newHandler);
+    socket.on('commentDeleted', deleteHandler);
+    return () => {
+      socket.off('newComment', newHandler);
+      socket.off('commentDeleted', deleteHandler);
+    };
   }, [photo.id, socket]);
+
+  // 管理员删除评论
+  const handleDeleteComment = async (commentId) => {
+    if (deletingIds.has(commentId)) return;
+    setDeletingIds(prev => new Set([...prev, commentId]));
+    try {
+      const result = await onAdminDeleteComment(commentId);
+      if (result.success) {
+        setComments(prev => prev.filter(c => c.id !== commentId));
+      } else {
+        setError(result.message || '删除失败');
+      }
+    } catch {
+      setError('删除失败');
+    } finally {
+      setDeletingIds(prev => {
+        const next = new Set(prev);
+        next.delete(commentId);
+        return next;
+      });
+    }
+  };
 
   // 发送评论
   const handleSubmit = async (e) => {
@@ -123,7 +153,7 @@ export default function PhotoDetail({ photo, socket, onClose }) {
               <p className="text-center text-gray-500 py-8 text-sm">暂无评论，快来抢沙发吧 🛋️</p>
             ) : (
               comments.map(c => (
-                <div key={c.id} className="flex gap-3">
+                <div key={c.id} className="flex gap-3 group">
                   {/* 头像 */}
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                     {c.author.charAt(0)}
@@ -137,6 +167,21 @@ export default function PhotoDetail({ photo, socket, onClose }) {
                     </div>
                     <p className="text-sm text-gray-400 mt-0.5 break-words">{c.content}</p>
                   </div>
+                  {/* 管理员删除按钮 */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDeleteComment(c.id)}
+                      disabled={deletingIds.has(c.id)}
+                      className="flex-shrink-0 w-6 h-6 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50"
+                      title="删除评论"
+                    >
+                      {deletingIds.has(c.id) ? (
+                        <div className="w-3 h-3 border border-red-300 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        '🗑️'
+                      )}
+                    </button>
+                  )}
                 </div>
               ))
             )}
