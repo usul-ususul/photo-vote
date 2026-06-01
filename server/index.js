@@ -451,6 +451,21 @@ app.post('/api/admin/photos/:id/reject', requireAdmin, async (req, res) => {
   }
 });
 
+// 一键拒绝全部待审照片（管理员）
+app.post('/api/admin/photos/reject-all', requireAdmin, async (req, res) => {
+  try {
+    const pending = await getPendingPhotos();
+    const count = pending.length;
+    for (const p of pending) {
+      await rejectPhoto(p.id);
+    }
+    console.log(`❌ 管理员一键拒绝了 ${count} 张待审照片`);
+    res.json({ success: true, count, message: `已拒绝全部 ${count} 张待审照片` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ============ Socket.io 连接处理 ============
 io.on('connection', (socket) => {
   console.log(`🔌 客户端已连接: ${socket.id}`);

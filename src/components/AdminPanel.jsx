@@ -10,6 +10,7 @@ export default function AdminPanel({ token, onLogout, onClose }) {
   const [maintenance, setMaintenance] = useState(false);
   const [togglingMaintenance, setTogglingMaintenance] = useState(false);
   const [maintError, setMaintError] = useState('');
+  const [rejectingAll, setRejectingAll] = useState(false);
 
   const fetchStats = async () => {
     try {
@@ -86,6 +87,26 @@ export default function AdminPanel({ token, onLogout, onClose }) {
       setMaintError('网络错误，请重试');
     } finally {
       setTogglingMaintenance(false);
+    }
+  };
+
+  // 一键拒绝全部
+  const handleRejectAll = async () => {
+    if (rejectingAll || pending.length === 0) return;
+    if (!window.confirm(`确定要拒绝全部 ${pending.length} 张待审照片吗？此操作不可撤销！`)) return;
+    setRejectingAll(true);
+    try {
+      const res = await fetch('/api/admin/photos/reject-all', {
+        method: 'POST',
+        headers: { 'x-admin-token': token },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPending([]);
+        fetchStats();
+      }
+    } finally {
+      setRejectingAll(false);
     }
   };
 
@@ -296,6 +317,18 @@ export default function AdminPanel({ token, onLogout, onClose }) {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* 一键拒绝按钮 */}
+                  <button
+                    onClick={handleRejectAll}
+                    disabled={rejectingAll}
+                    className="w-full py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/25 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {rejectingAll ? (
+                      <><div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> 拒绝中...</>
+                    ) : (
+                      <>🗑️ 一键拒绝全部（{pending.length} 张）</>
+                    )}
+                  </button>
                   {pending.map(item => (
                     <div
                       key={item.id}
