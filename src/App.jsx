@@ -3,6 +3,8 @@ import { io } from 'socket.io-client';
 import PhotoGrid from './components/PhotoGrid';
 import Leaderboard from './components/Leaderboard';
 import UploadForm from './components/UploadForm';
+import PhotoDetail from './components/PhotoDetail';
+import HotComments from './components/HotComments';
 
 const socket = io('/', {
   transports: ['websocket', 'polling'],
@@ -15,6 +17,7 @@ export default function App() {
   const [showUpload, setShowUpload] = useState(false);
   const [sortBy, setSortBy] = useState('newest');
   const [loading, setLoading] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState(null); // 照片详情弹窗
 
   // 加载照片数据
   const fetchPhotos = async (sort = sortBy) => {
@@ -109,6 +112,29 @@ export default function App() {
     fetchLeaderboard();
   };
 
+  // 点击照片打开详情
+  const handlePhotoClick = async (photo) => {
+    try {
+      const res = await fetch(`/api/photos/${photo.id}`);
+      const data = await res.json();
+      if (data.success) setSelectedPhoto(data.data);
+    } catch {
+      // 如果 API 调用失败，直接用已有数据
+      setSelectedPhoto(photo);
+    }
+  };
+
+  // 根据 ID 打开照片详情（从热评跳转）
+  const handleHotPhotoClick = async (photoId) => {
+    try {
+      const res = await fetch(`/api/photos/${photoId}`);
+      const data = await res.json();
+      if (data.success) setSelectedPhoto(data.data);
+    } catch {
+      // 静默处理
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950">
       {/* 顶部导航栏 */}
@@ -185,13 +211,14 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <PhotoGrid photos={photos} votedIds={votedIds} onVote={handleVote} />
+              <PhotoGrid photos={photos} votedIds={votedIds} onVote={handleVote} onPhotoClick={handlePhotoClick} />
             )}
           </div>
 
           {/* 排行榜侧边栏 */}
-          <aside className="lg:w-80 flex-shrink-0">
+          <aside className="lg:w-80 flex-shrink-0 space-y-6">
             <Leaderboard leaderboard={leaderboard} />
+            <HotComments socket={socket} onPhotoClick={handleHotPhotoClick} />
           </aside>
         </div>
       </main>
@@ -201,6 +228,15 @@ export default function App() {
         <UploadForm
           onClose={() => setShowUpload(false)}
           onSuccess={handleUploadSuccess}
+        />
+      )}
+
+      {/* 照片详情弹窗 */}
+      {selectedPhoto && (
+        <PhotoDetail
+          photo={selectedPhoto}
+          socket={socket}
+          onClose={() => setSelectedPhoto(null)}
         />
       )}
 

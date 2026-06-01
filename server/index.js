@@ -5,7 +5,7 @@ import cors from 'cors';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
-import { initDb, getAllPhotos, getPhotoById, addPhoto, votePhoto, getLeaderboard, getUserVotes } from './db.js';
+import { initDb, getAllPhotos, getPhotoById, addPhoto, votePhoto, getLeaderboard, getUserVotes, addComment, getComments, getHotComments } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = join(__dirname, '..', 'dist');
@@ -180,6 +180,50 @@ app.get('/api/my-votes', async (req, res) => {
     const ip = getClientIP(req);
     const votedIds = await getUserVotes(ip);
     res.json({ success: true, data: votedIds });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ============ 评论路由 ============
+
+// 获取某张照片的评论
+app.get('/api/photos/:id/comments', async (req, res) => {
+  try {
+    const comments = await getComments(Number(req.params.id));
+    res.json({ success: true, data: comments });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 发表评论
+app.post('/api/photos/:id/comments', async (req, res) => {
+  try {
+    const photoId = Number(req.params.id);
+    const { author, content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ success: false, message: '请输入评论内容' });
+    }
+
+    const comment = await addComment(photoId, (author || '匿名').trim(), content.trim());
+
+    // 通过 Socket.io 广播新评论
+    io.emit('newComment', { photoId, comment });
+
+    res.json({ success: true, data: comment, message: '评论成功！' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 获取全站热评
+app.get('/api/comments/hot', async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 5;
+    const comments = await getHotComments(limit);
+    res.json({ success: true, data: comments });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

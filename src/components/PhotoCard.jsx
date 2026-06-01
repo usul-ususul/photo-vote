@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function PhotoCard({ photo, hasVoted, onVote }) {
+export default function PhotoCard({ photo, hasVoted, onVote, onPhotoClick }) {
   const [voting, setVoting] = useState(false);
   const [localVoted, setLocalVoted] = useState(hasVoted);
   const [animate, setAnimate] = useState(false);
@@ -35,7 +35,10 @@ export default function PhotoCard({ photo, hasVoted, onVote }) {
   return (
     <div className="group relative glass rounded-2xl overflow-hidden hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-500 hover:-translate-y-1">
       {/* 图片容器 */}
-      <div className="relative aspect-[4/3] overflow-hidden bg-gray-900">
+      <div
+        onClick={() => onPhotoClick?.(photo)}
+        className="relative aspect-[4/3] overflow-hidden bg-gray-900 cursor-pointer"
+      >
         <img
           src={imageUrl}
           alt={photo.title}
@@ -44,7 +47,11 @@ export default function PhotoCard({ photo, hasVoted, onVote }) {
         />
 
         {/* 悬停遮罩 */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        {/* 悬停提示 */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+          <span className="glass rounded-full px-4 py-1.5 text-sm text-white">💬 点击查看详情与评论</span>
+        </div>
 
         {/* 投票数标签 */}
         <div className="absolute top-3 right-3 glass rounded-full px-3 py-1.5 flex items-center gap-1.5 text-sm">

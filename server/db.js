@@ -59,6 +59,18 @@ export async function initDb() {
     )
   `);
 
+  // 创建评论表
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      photo_id INTEGER NOT NULL,
+      author TEXT NOT NULL DEFAULT '匿名',
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (photo_id) REFERENCES photos(id)
+    )
+  `);
+
   console.log('✅ 数据库初始化完成');
   console.log(`📡 数据库连接: ${DB_URL.startsWith('file:') ? '本地 SQLite' : 'Turso 云数据库'}`);
 }
@@ -162,4 +174,46 @@ export async function getUserVotes(ipAddress) {
     [ipAddress]
   );
   return result.rows.map(v => v.photo_id);
+}
+
+// ============ 评论 API ============
+
+/**
+ * 添加评论
+ */
+export async function addComment(photoId, author, content) {
+  await client.execute(
+    'INSERT INTO comments (photo_id, author, content) VALUES (?, ?, ?)',
+    [photoId, author, content]
+  );
+  const result = await client.execute(
+    'SELECT * FROM comments WHERE id = last_insert_rowid()'
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * 获取某张照片的评论列表
+ */
+export async function getComments(photoId) {
+  const result = await client.execute(
+    'SELECT * FROM comments WHERE photo_id = ? ORDER BY created_at DESC',
+    [photoId]
+  );
+  return result.rows;
+}
+
+/**
+ * 获取全站最新评论（热评）
+ */
+export async function getHotComments(limit = 5) {
+  const result = await client.execute(
+    `SELECT c.*, p.title as photo_title, p.filename as photo_filename
+     FROM comments c
+     JOIN photos p ON c.photo_id = p.id
+     ORDER BY c.created_at DESC
+     LIMIT ?`,
+    [limit]
+  );
+  return result.rows;
 }

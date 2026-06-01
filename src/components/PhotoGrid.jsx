@@ -1,6 +1,6 @@
 import PhotoCard from './PhotoCard';
 
-export default function PhotoGrid({ photos, votedIds, onVote }) {
+export default function PhotoGrid({ photos, votedIds, onVote, onPhotoClick }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
       {photos.map((photo, index) => (
@@ -13,6 +13,7 @@ export default function PhotoGrid({ photos, votedIds, onVote }) {
             photo={photo}
             hasVoted={votedIds.has(photo.id)}
             onVote={onVote}
+            onPhotoClick={onPhotoClick}
           />
         </div>
       ))}
