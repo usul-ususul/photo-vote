@@ -129,10 +129,10 @@ export default function PhotoCard({ photo, hasVoted, onVote, onPhotoClick, onCom
         {/* 评论按钮 */}
         <button
           onClick={(e) => { e.stopPropagation(); onCommentClick?.(photo); }}
-          className="flex-shrink-0 w-9 h-9 rounded-full glass border border-white/10 flex items-center justify-center text-sm hover:bg-white/10 hover:border-white/20 transition-all"
+          className="flex-shrink-0 px-3 py-1.5 rounded-full bg-blue-500/20 border border-blue-400/30 flex items-center gap-1 text-sm text-blue-300 hover:bg-blue-500/30 hover:border-blue-400/50 transition-all"
           title="查看评论"
         >
-          💬
+          💬 <span className="text-xs">评论</span>
         </button>
 
         {/* 投票按钮 */}
