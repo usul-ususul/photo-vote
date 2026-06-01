@@ -50,4 +50,67 @@
   .glass-hover {
     @apply hover:bg-white/10 hover:border-white/20 transition-all duration-300;
   }
+
+  /* ===== 液态玻璃背景效果 ===== */
+  .liquid-glass {
+    isolation: isolate;
+  }
+  /* 彩色光斑球 */
+  .liquid-orb-1,
+  .liquid-orb-2,
+  .liquid-orb-3,
+  .liquid-orb-4,
+  .liquid-orb-5 {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+  .liquid-orb-1 {
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.35), transparent 70%);
+    top: -250px; left: -150px;
+    filter: blur(120px);
+    animation: liquidFloat 20s ease-in-out infinite;
+  }
+  .liquid-orb-2 {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.3), transparent 70%);
+    bottom: -200px; right: -120px;
+    filter: blur(110px);
+    animation: liquidFloat 22s ease-in-out infinite reverse;
+    animation-delay: -7s;
+  }
+  .liquid-orb-3 {
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.3), transparent 70%);
+    top: 35%; left: 45%;
+    filter: blur(100px);
+    animation: liquidFloat 18s ease-in-out infinite;
+    animation-delay: -13s;
+  }
+  .liquid-orb-4 {
+    width: 350px; height: 350px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.25), transparent 70%);
+    top: 15%; right: 25%;
+    filter: blur(90px);
+    animation: liquidFloat 24s ease-in-out infinite reverse;
+    animation-delay: -3s;
+  }
+  .liquid-orb-5 {
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
+    bottom: 25%; left: 20%;
+    filter: blur(80px);
+    animation: liquidFloat 21s ease-in-out infinite;
+    animation-delay: -10s;
+  }
+
+  @keyframes liquidFloat {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(60px, -50px) scale(1.12); }
+    50% { transform: translate(-30px, 60px) scale(0.92); }
+    75% { transform: translate(-50px, -20px) scale(1.06); }
+  }
 }

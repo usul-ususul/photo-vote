@@ -218,6 +218,16 @@ export default function App() {
 
   return (
     <div className={`min-h-screen ${getBackgroundClass(bgSetting)}`}>
+      {/* 液态玻璃光斑 */}
+      {bgSetting === 'liquid' && (
+        <>
+          <div className="liquid-orb-1" />
+          <div className="liquid-orb-2" />
+          <div className="liquid-orb-3" />
+          <div className="liquid-orb-4" />
+          <div className="liquid-orb-5" />
+        </>
+      )}
       {/* 顶部导航栏 */}
       <header className="sticky top-0 z-50 glass border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">

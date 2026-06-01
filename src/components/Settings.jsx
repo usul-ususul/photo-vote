@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 const BACKGROUNDS = {
   // 渐变风格
   gradients: [
+    { id: 'liquid', name: '💎 液态玻璃', preview: 'from-violet-950 via-fuchsia-950 to-cyan-950', className: 'liquid-glass bg-gradient-to-br from-violet-950 via-fuchsia-950 to-cyan-950', special: true },
     { id: 'default', name: '默认暗紫', preview: 'from-gray-950 via-gray-900 to-indigo-950', className: 'bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950' },
     { id: 'sunset', name: '日落暖橙', preview: 'from-rose-950 via-orange-950 to-amber-900', className: 'bg-gradient-to-br from-rose-950 via-orange-950 to-amber-900' },
     { id: 'ocean', name: '深海蔚蓝', preview: 'from-slate-950 via-blue-950 to-cyan-900', className: 'bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-900' },
